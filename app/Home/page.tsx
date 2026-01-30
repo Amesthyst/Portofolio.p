@@ -1,165 +1,243 @@
-'use client';
+//Ricky
+"use client";
 
-import { useEffect, useState } from 'react';
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import { useEffect, useState } from "react";
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
-type Link = { id: string; name: string; url: string; userName: string; active: boolean };
+interface LinkItem {
+  id: string;
+  title: string;
+  url: string;
+  active: boolean;
+  order: number;
+}
 
-export default function AdminDashboard() {
-  const router = useRouter();
-
-  const [name, setName] = useState(''); 
-  const [avatar, setAvatar] = useState('');
-
-  const [links, setLinks] = useState<Link[]>([]);
-
-  const [newLink, setNewLink] = useState({ name: '', url: '' });
+export default function HomePage() {
+  const [links, setLinks] = useState<LinkItem[]>([]);
+  const [newTitle, setNewTitle] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const resLinks = await fetch('/api/links');
-        const linksData = await resLinks.json();
-
-        if (linksData.length > 0) {
-          setName(linksData[0].userName);
-          setAvatar(linksData[0].avatar || '');
-        }
-
-        setLinks(
-          linksData.map((l: any) => ({
-            id: l.id,
-            name: l.title,
-            url: l.url,
-            userName: l.userName,
-            active: l.active,
-          }))
-        );
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    fetchData();
+    fetch("/api/Link")
+      .then((res) => res.json())
+      .then((data) => setLinks(data));
   }, []);
 
-  const handleDragEnd = (result: DropResult) => {
+  const handleAdd = async () => {
+    if (!newTitle || !newUrl) return alert("Title and URL required");
+
+    const res = await fetch("/api/Link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: newTitle, url: newUrl }),
+    });
+
+    const added = await res.json();
+    setLinks((prev) => [...prev, added]);
+    setNewTitle("");
+    setNewUrl("");
+  };
+
+  const handleDelete = async (id: string) => {
+    await fetch(`/api/Link/${id}`, { method: "DELETE" });
+    setLinks((prev) => prev.filter((l) => l.id !== id));
+  };
+
+  const handleToggle = async (link: LinkItem) => {
+    const updated = { ...link, active: !link.active };
+    await fetch(`/api/Link/${link.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updated),
+    });
+    setLinks((prev) =>
+      prev.map((l) => (l.id === link.id ? updated : l))
+    );
+  };
+
+  const handleUpdate = async (id: string) => {
+    const link = links.find((l) => l.id === id);
+    if (!link) return;
+
+    await fetch(`/api/Link/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(link),
+    });
+    setEditingId(null);
+  };
+
+  const onDragEnd = async (result: any) => {
     if (!result.destination) return;
-    const items = Array.from(links);
-    const [reordered] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reordered);
-    setLinks(items);
-  };
 
-  const deleteLink = (id: string) => {
-    setLinks(links.filter(link => link.id !== id));
-  };
-
-  const addLink = () => {
-    if (newLink.name && newLink.url) {
-      setLinks([...links, { id: Date.now().toString(), ...newLink, userName: name, active: true }]);
-      setNewLink({ name: '', url: '' });
+    const reordered = Array.from(links);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    for (let i = 0; i < reordered.length; i++) {
+      reordered[i].order = i;
+      await fetch(`/api/Link/${reordered[i].id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reordered[i]),
+      });
     }
+
+    setLinks(reordered);
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6 flex flex-col gap-10">
-      <div className="flex items-center justify-between mb-6">
+    <div className="min-h-screen bg-gray-50">
+      <div className="flex justify-between items-center bg-white shadow-md px-4 py-3 mb-6">
         <a
           href="/Login"
-          className="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 mr-4"
+          className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 flex items-center gap-1"
         >
-          ← Login
+          <span className="font-bold">&larr;</span> Logout
         </a>
 
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-xl font-bold text-center flex-1">
+          Dashboard
+        </h1>
 
-        <div
-          className="flex items-center gap-4 cursor-pointer"
-          onClick={() => router.push('/Profile')}
-        >
-          <span className="font-medium">{name}</span>
-          <div className="w-12 h-12 relative rounded-full overflow-hidden border-2 border-gray-300">
-            {avatar ? (
-              <Image src={avatar} alt="Avatar" fill className="object-cover" />
-            ) : (
-              <div className="bg-gray-300 w-full h-full flex items-center justify-center text-white font-bold">
-                {name ? name.charAt(0) : 'U'}
-              </div>
-            )}
-          </div>
-        </div>
+        <a href="/Profile" className="ml-auto">
+          <img
+            src="/avatar.png"
+            alt="Avatar"
+            className="w-10 h-10 rounded-full border border-gray-300"
+          />
+        </a>
       </div>
 
-      <section className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-xl font-bold mb-4">Manage Links</h2>
-
+      <div className="max-w-2xl mx-auto p-4">
+        {/* Add new link */}
         <div className="flex gap-2 mb-4">
           <input
-            type="text"
-            placeholder="Link Name"
-            value={newLink.name}
-            onChange={(e) => setNewLink({ ...newLink, name: e.target.value })}
-            className="border p-2 rounded flex-1"
+            className="border p-2 flex-1"
+            placeholder="Title"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
           />
           <input
-            type="text"
+            className="border p-2 flex-1"
             placeholder="URL"
-            value={newLink.url}
-            onChange={(e) => setNewLink({ ...newLink, url: e.target.value })}
-            className="border p-2 rounded flex-1"
+            value={newUrl}
+            onChange={(e) => setNewUrl(e.target.value)}
           />
           <button
-            onClick={addLink}
-            className="bg-blue-500 text-white px-4 rounded hover:bg-blue-600"
+            className="bg-blue-500 text-white px-4"
+            onClick={handleAdd}
           >
             Add
           </button>
         </div>
-
-        <DragDropContext onDragEnd={handleDragEnd}>
+        <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="links">
             {(provided) => (
-              <ul {...provided.droppableProps} ref={provided.innerRef} className="flex flex-col gap-2">
+              <div ref={provided.innerRef} {...provided.droppableProps}>
                 {links.map((link, index) => (
-                  <Draggable key={link.id} draggableId={link.id} index={index}>
+                  <Draggable
+                    key={link.id}
+                    draggableId={link.id}
+                    index={index}
+                  >
                     {(provided) => (
-                      <li
+                      <div
                         ref={provided.innerRef}
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
-                        className="flex items-center justify-between border p-2 rounded shadow-sm bg-gray-50"
+                        className="flex items-center justify-between border p-2 mb-2 bg-white rounded shadow-sm"
                       >
-                        <div className="flex flex-col">
-                          <a
-                            href={link.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
-                          >
-                            {link.name}: {link.url}
-                          </a>
-                          <span className="text-gray-500 text-sm">{link.userName}</span>
+                        <div className="flex flex-col flex-1">
+                          {editingId === link.id ? (
+                            <>
+                              <input
+                                className="border p-1 mb-1"
+                                value={link.title}
+                                onChange={(e) =>
+                                  setLinks((prev) =>
+                                    prev.map((l) =>
+                                      l.id === link.id
+                                        ? { ...l, title: e.target.value }
+                                        : l
+                                    )
+                                  )
+                                }
+                              />
+                              <input
+                                className="border p-1"
+                                value={link.url}
+                                onChange={(e) =>
+                                  setLinks((prev) =>
+                                    prev.map((l) =>
+                                      l.id === link.id
+                                        ? { ...l, url: e.target.value }
+                                        : l
+                                    )
+                                  )
+                                }
+                              />
+                            </>
+                          ) : (
+                            <a
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`${
+                                link.active ? "text-blue-600" : "text-gray-400"
+                              }`}
+                            >
+                              {link.title} : {link.url}
+                            </a>
+                          )}
                         </div>
+
                         <div className="flex gap-2">
                           <button
-                            onClick={() => deleteLink(link.id)}
-                            className="px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600"
+                            className={`px-2 ${
+                              link.active
+                                ? "bg-green-500"
+                                : "bg-gray-400"
+                            } text-white`}
+                            onClick={() => handleToggle(link)}
+                          >
+                            {link.active ? "On" : "Off"}
+                          </button>
+
+                          {editingId === link.id ? (
+                            <button
+                              className="bg-blue-500 text-white px-2"
+                              onClick={() => handleUpdate(link.id)}
+                            >
+                              Save
+                            </button>
+                          ) : (
+                            <button
+                              className="bg-yellow-500 text-white px-2"
+                              onClick={() => setEditingId(link.id)}
+                            >
+                              Edit
+                            </button>
+                          )}
+
+                          <button
+                            className="bg-red-500 text-white px-2"
+                            onClick={() => handleDelete(link.id)}
                           >
                             Delete
                           </button>
                         </div>
-                      </li>
+                      </div>
                     )}
                   </Draggable>
                 ))}
+
                 {provided.placeholder}
-              </ul>
+              </div>
             )}
           </Droppable>
         </DragDropContext>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
